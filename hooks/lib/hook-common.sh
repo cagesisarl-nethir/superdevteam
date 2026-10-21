@@ -321,13 +321,15 @@ EOF
 
 trigger_escalation() {
     local reason="$1"
+    local from_model="${2:-}"
+    local to_model="${3:-}"
 
     log_warn "${CURRENT_HOOK:-hook}" "Escalation triggered: $reason"
     log_event_to_db "model_escalated" "escalation" "Escalation: $reason" "{\"reason\":\"${reason//\"/\\\"}\"}"
 
-    # Record escalation in state.sh if available
-    if declare -f record_escalation &>/dev/null; then
-        record_escalation "$reason" 2>/dev/null || true
+    # Record (and switch the model) only when both models are known
+    if [[ -n "$from_model" && -n "$to_model" ]] && declare -f record_escalation &>/dev/null; then
+        record_escalation "$from_model" "$to_model" "$reason" 2>/dev/null || true
     fi
 }
 

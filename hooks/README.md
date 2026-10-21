@@ -230,7 +230,7 @@ The shared library provides common functions for all hooks:
 - `is_autonomous_mode()` - Check if autonomous mode active
 - `is_circuit_breaker_open()` - Check if too many failures
 - `is_max_iterations_reached()` - Check iteration limit
-- `trigger_escalation(reason)` - Trigger model upgrade
+- `trigger_escalation(reason, [from_model], [to_model])` - Trigger model upgrade (recorded only when both models are given)
 - `save_checkpoint(message)` - Save progress checkpoint
 
 ## Environment Variables

@@ -198,8 +198,6 @@ handle_failure() {
 
     # Check if escalation needed
     if [[ "$failures" -ge "$threshold" ]]; then
-        trigger_escalation "$failures consecutive failures"
-
         local next_model
         case "$current_model" in
             haiku) next_model="sonnet" ;;
@@ -207,6 +205,8 @@ handle_failure() {
             opus) next_model="bug_council" ;;
             *) next_model="" ;;
         esac
+
+        trigger_escalation "$failures consecutive failures" "$current_model" "$next_model"
 
         if [[ "$next_model" == "bug_council" ]]; then
             inject_system_message "bug-council" "
