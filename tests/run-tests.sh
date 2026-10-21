@@ -35,18 +35,18 @@ log_test() {
 
 log_pass() {
     echo -e "${GREEN}[PASS]${NC} $1"
-    ((TESTS_PASSED++))
+    TESTS_PASSED=$((TESTS_PASSED + 1))
 }
 
 log_fail() {
     echo -e "${RED}[FAIL]${NC} $1"
-    ((TESTS_FAILED++))
+    TESTS_FAILED=$((TESTS_FAILED + 1))
     FAILED_TESTS+=("$1")
 }
 
 log_skip() {
     echo -e "${YELLOW}[SKIP]${NC} $1"
-    ((TESTS_SKIPPED++))
+    TESTS_SKIPPED=$((TESTS_SKIPPED + 1))
 }
 
 # Assert functions
@@ -55,7 +55,7 @@ assert_equals() {
     local actual="$2"
     local message="${3:-Values should be equal}"
 
-    ((TESTS_RUN++))
+    TESTS_RUN=$((TESTS_RUN + 1))
 
     if [ "$expected" = "$actual" ]; then
         log_pass "$message"
@@ -70,7 +70,7 @@ assert_not_empty() {
     local value="$1"
     local message="${2:-Value should not be empty}"
 
-    ((TESTS_RUN++))
+    TESTS_RUN=$((TESTS_RUN + 1))
 
     if [ -n "$value" ]; then
         log_pass "$message"
@@ -85,7 +85,7 @@ assert_empty() {
     local value="$1"
     local message="${2:-Value should be empty}"
 
-    ((TESTS_RUN++))
+    TESTS_RUN=$((TESTS_RUN + 1))
 
     if [ -z "$value" ]; then
         log_pass "$message"
@@ -101,7 +101,7 @@ assert_contains() {
     local needle="$2"
     local message="${3:-String should contain substring}"
 
-    ((TESTS_RUN++))
+    TESTS_RUN=$((TESTS_RUN + 1))
 
     if [[ "$haystack" == *"$needle"* ]]; then
         log_pass "$message"
@@ -117,7 +117,7 @@ assert_matches() {
     local pattern="$2"
     local message="${3:-Value should match pattern}"
 
-    ((TESTS_RUN++))
+    TESTS_RUN=$((TESTS_RUN + 1))
 
     if [[ "$value" =~ $pattern ]]; then
         log_pass "$message"
@@ -132,7 +132,7 @@ assert_file_exists() {
     local file="$1"
     local message="${2:-File should exist}"
 
-    ((TESTS_RUN++))
+    TESTS_RUN=$((TESTS_RUN + 1))
 
     if [ -f "$file" ]; then
         log_pass "$message"
@@ -147,7 +147,7 @@ assert_command_succeeds() {
     local cmd="$1"
     local message="${2:-Command should succeed}"
 
-    ((TESTS_RUN++))
+    TESTS_RUN=$((TESTS_RUN + 1))
 
     if eval "$cmd" > /dev/null 2>&1; then
         log_pass "$message"
@@ -162,7 +162,7 @@ assert_command_fails() {
     local cmd="$1"
     local message="${2:-Command should fail}"
 
-    ((TESTS_RUN++))
+    TESTS_RUN=$((TESTS_RUN + 1))
 
     if ! eval "$cmd" > /dev/null 2>&1; then
         log_pass "$message"
@@ -252,12 +252,12 @@ test_state_management() {
     # Test is_session_running
     if is_session_running; then
         log_pass "is_session_running returns true when session active"
-        ((TESTS_RUN++))
-        ((TESTS_PASSED++))
+        TESTS_RUN=$((TESTS_RUN + 1))
+        TESTS_PASSED=$((TESTS_PASSED + 1))
     else
         log_fail "is_session_running should return true"
-        ((TESTS_RUN++))
-        ((TESTS_FAILED++))
+        TESTS_RUN=$((TESTS_RUN + 1))
+        TESTS_FAILED=$((TESTS_FAILED + 1))
     fi
 
     # Test set_phase and get_current_phase
@@ -286,12 +286,12 @@ test_state_management() {
     end_session "completed" "Test finished"
     if ! is_session_running; then
         log_pass "is_session_running returns false after session ended"
-        ((TESTS_RUN++))
-        ((TESTS_PASSED++))
+        TESTS_RUN=$((TESTS_RUN + 1))
+        TESTS_PASSED=$((TESTS_PASSED + 1))
     else
         log_fail "Session should not be running after end_session"
-        ((TESTS_RUN++))
-        ((TESTS_FAILED++))
+        TESTS_RUN=$((TESTS_RUN + 1))
+        TESTS_FAILED=$((TESTS_FAILED + 1))
     fi
 
     teardown_test_db
@@ -370,12 +370,12 @@ test_sql_injection_prevention() {
     # This should fail validation, not execute
     if ! set_state "status; DROP TABLE sessions" "value" 2>/dev/null; then
         log_pass "SQL injection via field name blocked"
-        ((TESTS_RUN++))
-        ((TESTS_PASSED++))
+        TESTS_RUN=$((TESTS_RUN + 1))
+        TESTS_PASSED=$((TESTS_PASSED + 1))
     else
         log_fail "SQL injection via field name should be blocked"
-        ((TESTS_RUN++))
-        ((TESTS_FAILED++))
+        TESTS_RUN=$((TESTS_RUN + 1))
+        TESTS_FAILED=$((TESTS_FAILED + 1))
     fi
 
     # Verify tables still exist
@@ -412,12 +412,12 @@ test_event_logging() {
 
     if [ "$event_count" -ge 4 ]; then
         log_pass "Events were logged correctly ($event_count events)"
-        ((TESTS_RUN++))
-        ((TESTS_PASSED++))
+        TESTS_RUN=$((TESTS_RUN + 1))
+        TESTS_PASSED=$((TESTS_PASSED + 1))
     else
         log_fail "Expected at least 4 events, got $event_count"
-        ((TESTS_RUN++))
-        ((TESTS_FAILED++))
+        TESTS_RUN=$((TESTS_RUN + 1))
+        TESTS_FAILED=$((TESTS_FAILED + 1))
     fi
 
     teardown_test_db
@@ -445,12 +445,12 @@ test_file_structure() {
     cmd_count=$(find "$PROJECT_ROOT/commands" -name "*.md" | wc -l)
     if [ "$cmd_count" -ge 10 ]; then
         log_pass "Commands directory has sufficient files ($cmd_count)"
-        ((TESTS_RUN++))
-        ((TESTS_PASSED++))
+        TESTS_RUN=$((TESTS_RUN + 1))
+        TESTS_PASSED=$((TESTS_PASSED + 1))
     else
         log_fail "Expected at least 10 command files, got $cmd_count"
-        ((TESTS_RUN++))
-        ((TESTS_FAILED++))
+        TESTS_RUN=$((TESTS_RUN + 1))
+        TESTS_FAILED=$((TESTS_FAILED + 1))
     fi
 }
 
@@ -465,12 +465,12 @@ test_configuration() {
     if command -v jq &> /dev/null; then
         if jq empty "$PROJECT_ROOT/agent-registry.json" 2>/dev/null; then
             log_pass "agent-registry.json is valid JSON"
-            ((TESTS_RUN++))
-            ((TESTS_PASSED++))
+            TESTS_RUN=$((TESTS_RUN + 1))
+            TESTS_PASSED=$((TESTS_PASSED + 1))
         else
             log_fail "agent-registry.json is not valid JSON"
-            ((TESTS_RUN++))
-            ((TESTS_FAILED++))
+            TESTS_RUN=$((TESTS_RUN + 1))
+            TESTS_FAILED=$((TESTS_FAILED + 1))
         fi
 
         # Check required fields in agent-registry.json
@@ -482,12 +482,12 @@ test_configuration() {
         agent_count=$(jq '.agents | length' "$PROJECT_ROOT/agent-registry.json")
         if [ "$agent_count" -ge 80 ]; then
             log_pass "agent-registry.json has sufficient agents ($agent_count)"
-            ((TESTS_RUN++))
-            ((TESTS_PASSED++))
+            TESTS_RUN=$((TESTS_RUN + 1))
+            TESTS_PASSED=$((TESTS_PASSED + 1))
         else
             log_fail "Expected at least 80 agents, got $agent_count"
-            ((TESTS_RUN++))
-            ((TESTS_FAILED++))
+            TESTS_RUN=$((TESTS_RUN + 1))
+            TESTS_FAILED=$((TESTS_FAILED + 1))
         fi
     else
         log_skip "jq not installed, skipping JSON validation tests"
