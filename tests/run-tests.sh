@@ -412,6 +412,11 @@ test_event_logging() {
         TESTS_RUN=$((TESTS_RUN + 1))
     fi
 
+    # task-1 is not in the tasks table: the run must still be recorded
+    local run_count
+    run_count=$(sqlite3 "$DB_FILE" "SELECT COUNT(*) FROM agent_runs WHERE session_id='$session_id';")
+    assert_equals "1" "$run_count" "agent_runs records the run of an unknown task"
+
     teardown_test_db
 }
 

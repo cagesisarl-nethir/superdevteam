@@ -234,8 +234,9 @@ log_agent_started() {
     esc_model=$(sql_escape "$model")
     esc_task_id=$(sql_escape "$task_id")
 
+    # task_id is a foreign key to tasks: store NULL for a task not in that table (the event keeps the id)
     local query="INSERT INTO agent_runs (session_id, agent, model, task_id, iteration, status)
-        VALUES ('$esc_session_id', '$esc_agent', '$esc_model', NULLIF('$esc_task_id', ''), ${iteration:-0}, 'running');"
+        VALUES ('$esc_session_id', '$esc_agent', '$esc_model', (SELECT id FROM tasks WHERE id = '$esc_task_id'), ${iteration:-0}, 'running');"
 
     sql_exec "$query" > /dev/null || log_warn "Failed to insert agent_runs record" "events"
 }
