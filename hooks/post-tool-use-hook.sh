@@ -141,17 +141,22 @@ detect_outcome() {
 gate_for_command() {
     local command="$1"
 
-    if echo "$command" | grep -qE "(pytest|jest|vitest|mocha|go test|npm (run )?test|yarn test|bun test|rspec|phpunit|pest|artisan test|cargo test)"; then
+    # The gate is the first significant word, not a substring anywhere
+    # ("git show 3c8a1f2" is not c8): drop leading "cd dir &&" and VAR=value
+    command=$(echo "$command" | sed -E 's/^[[:space:]]*(cd [^;&|]*(&&|;)[[:space:]]*)*//; s/^([A-Za-z_][A-Za-z0-9_]*=[^[:space:]]*[[:space:]]+)*//')
+    local bin='^((npx|bunx|pnpm exec|php) )?(\./)?((vendor/bin|node_modules/\.bin)/)?'
+
+    if echo "$command" | grep -qE "${bin}(pytest|jest|vitest|mocha|rspec|phpunit|pest)\b|^(go|cargo) test\b|^(npm|yarn|pnpm|bun) (run )?test\b|^php artisan test\b"; then
         echo "tests test"
-    elif echo "$command" | grep -qE "(tsc|mypy|pyright|phpstan|psalm)"; then
+    elif echo "$command" | grep -qE "${bin}(tsc|mypy|pyright|phpstan|psalm)\b"; then
         echo "typecheck type"
-    elif echo "$command" | grep -qE "(eslint|ruff|golangci-lint|rubocop|phpcs|pint|flake8|pylint|biome|prettier)"; then
+    elif echo "$command" | grep -qE "${bin}(eslint|ruff|golangci-lint|rubocop|phpcs|pint|flake8|pylint|biome|prettier)\b"; then
         echo "lint lint"
-    elif echo "$command" | grep -qE "(bandit|npm audit|yarn audit|composer audit|gosec|brakeman|safety|snyk|trivy)"; then
+    elif echo "$command" | grep -qE "${bin}(bandit|gosec|brakeman|safety|snyk|trivy)\b|^(npm|yarn|composer) audit\b"; then
         echo "security security"
-    elif echo "$command" | grep -qE "(--cov|coverprofile|lcov|nyc|c8)"; then
+    elif echo "$command" | grep -qE "${bin}(c8|nyc|lcov)\b"; then
         echo "coverage coverage"
-    elif echo "$command" | grep -qE "(npm run build|vite build|webpack|esbuild|rollup|cargo build|go build)"; then
+    elif echo "$command" | grep -qE "^(npm|yarn|pnpm) run build\b|${bin}(vite build|webpack|esbuild|rollup)\b|^(cargo|go) build\b"; then
         echo "build build"
     fi
 }
