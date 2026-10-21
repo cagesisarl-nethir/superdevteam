@@ -195,14 +195,8 @@ inject_system_message() {
     local id="$1"
     local message="$2"
 
-    # Escape message for JSON
-    local escaped_msg
-    escaped_msg=$(printf '%s' "$message" | sed 's/\\/\\\\/g; s/"/\\"/g; s/\t/\\t/g' | awk '{printf "%s\\n", $0}' | sed 's/\\n$//')
-
-    # Output JSON context injection to stdout (Claude Code hook protocol)
-    cat <<EOF
-{"id":"devteam-${id}","type":"system","message":"${escaped_msg}"}
-EOF
+    # stderr is what Claude Code feeds back to Claude when the hook exits 2
+    printf '[devteam-%s]%s\n' "$id" "$message" >&2
 }
 
 # ============================================================================
