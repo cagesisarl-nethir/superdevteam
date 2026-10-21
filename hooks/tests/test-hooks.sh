@@ -285,10 +285,10 @@ echo ""
 # Source library again to get function
 source "$HOOKS_DIR/lib/hook-common.sh" 2>/dev/null || true
 
-result=$(inject_system_message "test-tag" "Test message content")
-assert_contains "$result" "<system-test-tag>" "injects opening tag"
+# The message goes to stderr, which Claude Code feeds back to Claude on exit 2
+result=$(inject_system_message "test-tag" "Test message content" 2>&1 >/dev/null)
+assert_contains "$result" "\[devteam-test-tag\]" "injects tag on stderr"
 assert_contains "$result" "Test message content" "includes message"
-assert_contains "$result" "</system-test-tag>" "injects closing tag"
 
 echo ""
 
