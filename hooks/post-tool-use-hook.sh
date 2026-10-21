@@ -8,6 +8,7 @@
 #
 # Environment variables expected:
 #   CLAUDE_TOOL_NAME - Name of the tool that was called
+#   CLAUDE_TOOL_INPUT - JSON input for the tool (command)
 #   CLAUDE_TOOL_RESULT - Result/output from the tool
 
 set -euo pipefail
@@ -31,65 +32,55 @@ init_hook "post-tool-use"
 # ============================================================================
 
 TOOL_NAME="${CLAUDE_TOOL_NAME:-}"
+TOOL_INPUT="${CLAUDE_TOOL_INPUT:-}"
 TOOL_RESULT="${CLAUDE_TOOL_RESULT:-}"
+
+TOOL_COMMAND=""
+if [[ -n "$TOOL_INPUT" ]]; then
+    TOOL_COMMAND=$(printf '%s' "$TOOL_INPUT" | node -e '
+        let s = "";
+        process.stdin.on("data", d => s += d).on("end", () => {
+            try { process.stdout.write(JSON.parse(s).command || ""); } catch (e) {}
+        });')
+fi
 
 # ============================================================================
 # OUTCOME DETECTION PATTERNS
 # ============================================================================
 
-# Patterns indicating failure
+# Patterns indicating failure (case-sensitive; counts must be non-zero so
+# "0 failures" in a passing run does not match)
 FAILURE_PATTERNS=(
-    "FAIL"
+    "FAILURES!"
+    "ERRORS!"
     "FAILED"
-    "Error:"
-    "error:"
-    "ERROR"
-    "Exception"
+    "FAIL "
+    "(Failures|Errors): [1-9]"
+    "[1-9][0-9]* (failed|failing|failures?|errors?|problems?)"
+    "Found [1-9][0-9]* errors?"
+    "FOUND [1-9][0-9]* ERRORS?"
+    "error TS[0-9]+"
     "Traceback"
-    "AssertionError"
-    "TypeError"
+    "Fatal error"
     "SyntaxError"
-    "ReferenceError"
-    "ModuleNotFoundError"
-    "ImportError"
-    "AttributeError"
-    "NameError"
-    "KeyError"
-    "IndexError"
-    "ValueError"
-    "RuntimeError"
-    "exit code [1-9]"
-    "exit status [1-9]"
-    "exited with code [1-9]"
     "Build failed"
     "Test failed"
     "Compilation failed"
-    "compile error"
     "Permission denied"
-    "No such file"
+    "No such file or directory"
     "command not found"
-    "ENOENT"
-    "EACCES"
-    "EPERM"
 )
 
 # Patterns indicating success
 SUCCESS_PATTERNS=(
-    "PASS"
-    "PASSED"
+    "OK \\("
+    "[0-9]+ passed"
     "All tests pass"
-    "tests passed"
-    "Build succeeded"
-    "Successfully"
-    "Completed successfully"
     "0 errors"
     "0 failures"
-    "exit code 0"
-    "exit status 0"
-    "OK"
-    "Done"
-    "created successfully"
-    "updated successfully"
+    "No errors"
+    "no problems"
+    "Build succeeded"
 )
 
 # ============================================================================
@@ -101,7 +92,7 @@ detect_outcome() {
 
     # Check for failure patterns first (more specific, takes priority)
     for pattern in "${FAILURE_PATTERNS[@]}"; do
-        if echo "$result" | grep -qiE "$pattern"; then
+        if echo "$result" | grep -qE "$pattern"; then
             echo "failure"
             return
         fi
@@ -109,7 +100,7 @@ detect_outcome() {
 
     # Check for success patterns
     for pattern in "${SUCCESS_PATTERNS[@]}"; do
-        if echo "$result" | grep -qi "$pattern"; then
+        if echo "$result" | grep -qE "$pattern"; then
             echo "success"
             return
         fi
@@ -122,38 +113,29 @@ detect_outcome() {
 # QUALITY GATE DETECTION
 # ============================================================================
 
+# Prints "<gate> <gate_type>" for a quality gate command, nothing otherwise
+gate_for_command() {
+    local command="$1"
+
+    if echo "$command" | grep -qE "(pytest|jest|vitest|mocha|go test|npm (run )?test|yarn test|bun test|rspec|phpunit|pest|artisan test|cargo test)"; then
+        echo "tests test"
+    elif echo "$command" | grep -qE "(tsc|mypy|pyright|phpstan|psalm)"; then
+        echo "typecheck type"
+    elif echo "$command" | grep -qE "(eslint|ruff|golangci-lint|rubocop|phpcs|pint|flake8|pylint|biome|prettier)"; then
+        echo "lint lint"
+    elif echo "$command" | grep -qE "(bandit|npm audit|yarn audit|composer audit|gosec|brakeman|safety|snyk|trivy)"; then
+        echo "security security"
+    elif echo "$command" | grep -qE "(--cov|coverprofile|lcov|nyc|c8)"; then
+        echo "coverage coverage"
+    elif echo "$command" | grep -qE "(npm run build|vite build|webpack|esbuild|rollup|cargo build|go build)"; then
+        echo "build build"
+    fi
+}
+
 detect_quality_gate() {
-    local tool="$1"
-    local result="$2"
-
-    # Only analyze Bash command results
-    if [[ "$tool" != "Bash" ]]; then
-        return
-    fi
-
-    local gate=""
-    local gate_type=""
-
-    # Detect which quality gate was run
-    if echo "$result" | grep -qiE "(pytest|jest|vitest|mocha|go test|npm test|yarn test|bun test|rspec|phpunit|cargo test)"; then
-        gate="tests"
-        gate_type="test"
-    elif echo "$result" | grep -qiE "(tsc|mypy|pyright|type.check|typescript)"; then
-        gate="typecheck"
-        gate_type="type"
-    elif echo "$result" | grep -qiE "(eslint|ruff|golangci-lint|rubocop|phpcs|flake8|pylint|biome|prettier)"; then
-        gate="lint"
-        gate_type="lint"
-    elif echo "$result" | grep -qiE "(bandit|npm audit|yarn audit|gosec|brakeman|safety|snyk|trivy)"; then
-        gate="security"
-        gate_type="security"
-    elif echo "$result" | grep -qiE "(coverage|--cov|coverprofile|lcov|nyc|c8)"; then
-        gate="coverage"
-        gate_type="coverage"
-    elif echo "$result" | grep -qiE "(build|compile|webpack|vite|esbuild|rollup|tsc --build)"; then
-        gate="build"
-        gate_type="build"
-    fi
+    local gate="$1"
+    local gate_type="$2"
+    local result="$3"
 
     if [[ -n "$gate" ]]; then
         local outcome
@@ -354,6 +336,19 @@ main() {
         exit 0
     fi
 
+    # Only quality gate commands are analyzed: word matching on arbitrary
+    # output (git log, grep) counted false failures
+    local gate gate_type
+    read -r gate gate_type <<< "$(gate_for_command "$TOOL_COMMAND")"
+    if [[ "$TOOL_NAME" != "Bash" ]] || [[ -z "$gate" ]]; then
+        exit 0
+    fi
+
+    # Failure counters live on the session: without one there is nothing to track
+    if [[ -z "$(get_current_session_id 2>/dev/null)" ]]; then
+        exit 0
+    fi
+
     log_debug "post-tool-use" "Processing result from: $TOOL_NAME"
 
     # Detect outcome
@@ -379,7 +374,7 @@ main() {
     esac
 
     # Detect and log quality gate results
-    detect_quality_gate "$TOOL_NAME" "$TOOL_RESULT"
+    detect_quality_gate "$gate" "$gate_type" "$TOOL_RESULT"
 
     # Notify MCP server
     mcp_notify "post_tool_use" "$(get_claude_context)"
