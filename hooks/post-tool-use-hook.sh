@@ -6,7 +6,9 @@
 #   0 = Continue normally
 #   (Post hooks typically don't block, just observe and inject guidance)
 #
-# Environment variables expected:
+# Input: the JSON event Claude Code sends on stdin (tool_name,
+# tool_input.command, tool_response). Only Bash output is analyzed.
+# Fallback when stdin is empty (legacy test suite):
 #   CLAUDE_TOOL_NAME - Name of the tool that was called
 #   CLAUDE_TOOL_INPUT - JSON input for the tool (command)
 #   CLAUDE_TOOL_RESULT - Result/output from the tool
@@ -31,17 +33,39 @@ init_hook "post-tool-use"
 # CONFIGURATION
 # ============================================================================
 
-TOOL_NAME="${CLAUDE_TOOL_NAME:-}"
-TOOL_INPUT="${CLAUDE_TOOL_INPUT:-}"
-TOOL_RESULT="${CLAUDE_TOOL_RESULT:-}"
-
-TOOL_COMMAND=""
-if [[ -n "$TOOL_INPUT" ]]; then
-    TOOL_COMMAND=$(printf '%s' "$TOOL_INPUT" | node -e '
+# Prints a field of the JSON event read on stdin: tool_name, command, or
+# result (Bash stdout + stderr). node is always present: hooks run through run-hook.js
+event_field() {
+    node -e '
         let s = "";
         process.stdin.on("data", d => s += d).on("end", () => {
-            try { process.stdout.write(JSON.parse(s).command || ""); } catch (e) {}
-        });')
+            let j = {};
+            try { j = JSON.parse(s); } catch (e) {}
+            const r = j.tool_response || {};
+            const fields = {
+                tool_name: j.tool_name,
+                command: (j.tool_input || {}).command,
+                result: typeof r === "string" ? r : [r.stdout, r.stderr].filter(Boolean).join("\n"),
+            };
+            process.stdout.write(fields[process.argv[1]] || "");
+        });' "$1"
+}
+
+HOOK_INPUT=""
+[[ -t 0 ]] || HOOK_INPUT=$(cat)
+
+if [[ -n "$HOOK_INPUT" ]]; then
+    TOOL_NAME=$(printf '%s' "$HOOK_INPUT" | event_field tool_name)
+    TOOL_COMMAND=$(printf '%s' "$HOOK_INPUT" | event_field command)
+    TOOL_RESULT=""
+    # Other tools' responses hold file contents, whose "Error" words would count as failures
+    if [[ "$TOOL_NAME" == "Bash" ]]; then
+        TOOL_RESULT=$(printf '%s' "$HOOK_INPUT" | event_field result)
+    fi
+else
+    TOOL_NAME="${CLAUDE_TOOL_NAME:-}"
+    TOOL_COMMAND=$(printf '{"tool_input":%s}' "${CLAUDE_TOOL_INPUT:-null}" | event_field command)
+    TOOL_RESULT="${CLAUDE_TOOL_RESULT:-}"
 fi
 
 # ============================================================================
