@@ -59,66 +59,68 @@ fi
 # ============================================================================
 
 # Commands that should ALWAYS be blocked
+# Patterns use word boundaries (\b) and, for paths, an end anchor, so that
+# "rm -rf /tmp/x", "--follow-tags" or "echo departed" do not match.
 DANGEROUS_PATTERNS=(
     # Destructive file operations
-    "rm -rf /"
-    "rm -rf /*"
-    "rm -rf ~"
-    "rm -rf \$HOME"
-    "rm -rf \\\$HOME"
+    '\brm\s+-rf\s+/(\s|;|&|\||$)'
+    '\brm\s+-rf\s+/\*'
+    '\brm\s+-rf\s+~/?(\s|;|&|\||$)'
+    '\brm\s+-rf\s+\$HOME/?(\s|;|&|\||$)'
+    '\brm\s+-rf\s+\\\$HOME/?(\s|;|&|\||$)'
 
     # Disk/system destruction
-    "dd if=/dev/zero"
-    "dd if=/dev/random"
-    "mkfs\."
-    "fdisk"
-    "parted"
-    "> /dev/sd"
-    "> /dev/nvme"
+    '\bdd\s+if=/dev/zero'
+    '\bdd\s+if=/dev/random'
+    '\bmkfs\.'
+    '\bfdisk\b'
+    '\bparted\b'
+    '>\s*/dev/sd'
+    '>\s*/dev/nvme'
 
     # Fork bombs and system abuse
-    ":\(\)\{ :\|:& \};"
-    ":(){ :|:& };"
+    ':\(\)\{ :\|:& \};'
+    ':(){ :|:& };'
 
     # Dangerous permissions
-    "chmod -R 777 /"
-    "chmod -R 777 /\*"
-    "chown -R.*/"
+    '\bchmod\s+-R\s+777\s+/(\s|;|&|\||$)'
+    '\bchmod\s+-R\s+777\s+/\*'
+    '\bchown\s+-R\s+\S+\s+/(\s|\*|;|&|\||$)'
 
     # Git force push to main/master
-    "git push.*--force.*main"
-    "git push.*--force.*master"
-    "git push.*-f.*main"
-    "git push.*-f.*master"
+    '\bgit\s+push\b.*\s--force\b.*\bmain\b'
+    '\bgit\s+push\b.*\s--force\b.*\bmaster\b'
+    '\bgit\s+push\b.*\s-f\b.*\bmain\b'
+    '\bgit\s+push\b.*\s-f\b.*\bmaster\b'
 
-    # Database destruction
-    "DROP DATABASE"
-    "DROP TABLE"
-    "TRUNCATE TABLE"
-    "DELETE FROM.*WHERE 1"
+    # Database destruction (only when a database client runs it, before or after the SQL)
+    '\b(mysql|mariadb|psql|sqlite3|tinker)\b.*DROP\s+DATABASE|DROP\s+DATABASE.*\b(mysql|mariadb|psql|sqlite3)\b'
+    '\b(mysql|mariadb|psql|sqlite3|tinker)\b.*DROP\s+TABLE|DROP\s+TABLE.*\b(mysql|mariadb|psql|sqlite3)\b'
+    '\b(mysql|mariadb|psql|sqlite3|tinker)\b.*TRUNCATE\s+TABLE|TRUNCATE\s+TABLE.*\b(mysql|mariadb|psql|sqlite3)\b'
+    '\b(mysql|mariadb|psql|sqlite3|tinker)\b.*DELETE\s+FROM.*WHERE\s+1|DELETE\s+FROM.*WHERE\s+1.*\b(mysql|mariadb|psql|sqlite3)\b'
 
     # Credential/key exposure
-    "cat.*\.ssh/id_"
-    "cat.*/etc/shadow"
-    "cat.*/etc/passwd"
+    '\bcat\b.*\.ssh/id_'
+    '\bcat\b.*/etc/shadow'
+    '\bcat\b.*/etc/passwd'
 
     # Crypto mining/malware indicators
-    "curl.*\|.*bash"
-    "wget.*\|.*bash"
-    "curl.*\|.*sh"
-    "wget.*\|.*sh"
+    '\bcurl\b.*\|.*\bbash\b'
+    '\bwget\b.*\|.*\bbash\b'
+    '\bcurl\b.*\|.*\bsh\b'
+    '\bwget\b.*\|.*\bsh\b'
 
     # Arbitrary code execution
-    "eval\s+"
+    '\beval\s+'
 
     # Privilege escalation
-    "sudo\s+"
+    '\bsudo\s+'
 
     # Overly permissive permissions
-    "chmod\s+777"
+    '\bchmod\s+777\b'
 
     # Variant of rm -rf /
-    "rm\s+-rf\s+/\*"
+    '\brm\s+-rf\s+/\*'
 )
 
 # Prints the "command" field of a Bash tool input (JSON)
