@@ -7,7 +7,8 @@
 #   0 = Allow exit (work complete or not in autonomous mode)
 #   2 = Block exit and re-inject prompt (work not complete)
 #
-# Environment variables expected:
+# Input: the JSON event Claude Code sends on stdin (last_assistant_message).
+# Fallback when stdin is empty (legacy test suite):
 #   STOP_HOOK_MESSAGE or CLAUDE_OUTPUT - Claude's last message
 
 set -euo pipefail
@@ -30,7 +31,20 @@ init_hook "stop"
 # CONFIGURATION
 # ============================================================================
 
-MESSAGE="${STOP_HOOK_MESSAGE:-${CLAUDE_OUTPUT:-}}"
+HOOK_INPUT=""
+[[ -t 0 ]] || HOOK_INPUT=$(cat)
+
+MESSAGE=""
+if [[ -n "$HOOK_INPUT" ]]; then
+    MESSAGE=$(printf '%s' "$HOOK_INPUT" | node -e '
+        let s = "";
+        process.stdin.on("data", d => s += d).on("end", () => {
+            let j = {};
+            try { j = JSON.parse(s); } catch (e) {}
+            process.stdout.write(j.last_assistant_message || "");
+        });')
+fi
+MESSAGE="${MESSAGE:-${STOP_HOOK_MESSAGE:-${CLAUDE_OUTPUT:-}}}"
 
 # ============================================================================
 # VALID EXIT SIGNALS
