@@ -121,6 +121,19 @@ DANGEROUS_PATTERNS=(
     "rm\s+-rf\s+/\*"
 )
 
+# Prints the "command" field of a Bash tool input (JSON)
+bash_command_of() {
+    local input="$1"
+    local command=""
+    if command -v jq &>/dev/null; then
+        command=$(echo "$input" | jq -r '.command // empty' 2>/dev/null)
+    fi
+    if [[ -z "$command" ]]; then
+        command=$(echo "$input" | grep -o '"command"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | sed 's/.*"command"[[:space:]]*:[[:space:]]*"//;s/"$//')
+    fi
+    echo "$command"
+}
+
 # ============================================================================
 # SCOPE VALIDATION FOR FILE OPERATIONS
 # ============================================================================
@@ -138,13 +151,16 @@ validate_file_operation() {
             file_path=$(echo "$input" | sed -n 's/.*"file_path"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' 2>/dev/null || true)
             ;;
         Bash)
+            # Parse the command itself: the raw JSON ends with "description"
+            local command
+            command=$(bash_command_of "$input")
             # Check for file-modifying commands and extract target
-            if echo "$input" | grep -qE '(cat\s*>|echo\s*>|printf\s*>|tee\s)'; then
+            if echo "$command" | grep -qE '(cat\s*>|echo\s*>|printf\s*>|tee\s)'; then
                 # Redirect operations
-                file_path=$(echo "$input" | sed -n 's/.*>[[:space:]]*\([^[:space:];&|]*\).*/\1/p' 2>/dev/null | head -1 || true)
-            elif echo "$input" | grep -qE '(sed\s+-i|mv\s|cp\s)'; then
+                file_path=$(echo "$command" | sed -n 's/.*>[[:space:]]*\([^[:space:];&|]*\).*/\1/p' 2>/dev/null | head -1 || true)
+            elif echo "$command" | grep -qE '(sed\s+-i|mv\s|cp\s)'; then
                 # In-place edit or move/copy
-                file_path=$(echo "$input" | awk '{print $NF}' 2>/dev/null || true)
+                file_path=$(echo "$command" | awk '{print $NF}' 2>/dev/null || true)
             fi
             ;;
         *)
@@ -200,14 +216,8 @@ check_dangerous_commands() {
         return 0
     fi
 
-    # Extract command from JSON input
-    local command=""
-    if command -v jq &>/dev/null; then
-        command=$(echo "$input" | jq -r '.command // empty' 2>/dev/null)
-    fi
-    if [[ -z "$command" ]]; then
-        command=$(echo "$input" | grep -o '"command"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | sed 's/.*"command"[[:space:]]*:[[:space:]]*"//;s/"$//')
-    fi
+    local command
+    command=$(bash_command_of "$input")
 
     for pattern in "${DANGEROUS_PATTERNS[@]}"; do
         if echo "$command" | grep -qiE "$pattern"; then
