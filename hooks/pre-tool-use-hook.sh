@@ -6,7 +6,8 @@
 #   0 = Allow tool call
 #   2 = Block tool call with message
 #
-# Environment variables expected:
+# Input: the JSON event Claude Code sends on stdin (tool_name, tool_input).
+# Fallback when stdin is empty (legacy test suite):
 #   CLAUDE_TOOL_NAME - Name of the tool being called
 #   CLAUDE_TOOL_INPUT - JSON input for the tool
 
@@ -30,8 +31,23 @@ init_hook "pre-tool-use"
 # CONFIGURATION
 # ============================================================================
 
-TOOL_NAME="${CLAUDE_TOOL_NAME:-}"
-TOOL_INPUT="${CLAUDE_TOOL_INPUT:-}"
+HOOK_INPUT=""
+[[ -t 0 ]] || HOOK_INPUT=$(cat)
+
+if [[ -n "$HOOK_INPUT" ]]; then
+    # node is always present: hooks.json launches every hook through run-hook.js
+    { read -r TOOL_NAME; read -r TOOL_INPUT; } < <(printf '%s' "$HOOK_INPUT" | node -e '
+        let s = "";
+        process.stdin.on("data", d => s += d).on("end", () => {
+            let j = {};
+            try { j = JSON.parse(s); } catch (e) {}
+            console.log(j.tool_name || "");
+            console.log(j.tool_input ? JSON.stringify(j.tool_input) : "");
+        });')
+else
+    TOOL_NAME="${CLAUDE_TOOL_NAME:-}"
+    TOOL_INPUT="${CLAUDE_TOOL_INPUT:-}"
+fi
 
 if [[ -z "$TOOL_NAME" ]] && [[ -z "$TOOL_INPUT" ]]; then
     log_warn "pre-tool-use" "No CLAUDE_TOOL_NAME or CLAUDE_TOOL_INPUT set"
