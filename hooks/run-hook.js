@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Cross-platform hook runner for DevTeam
 // Detects OS and runs the appropriate .sh (Unix) or .ps1 (Windows) hook script.
-// Always exits 0 on error — hooks must never block Claude Code.
+// Relays the hook's exit code (2 = block); exits 0 only if the hook could not run.
 
 'use strict';
 
@@ -33,6 +33,6 @@ try {
     }
   }
 } catch (e) {
-  // Hooks degrade gracefully — never block Claude Code
-  process.exit(0);
+  // status is null on timeout and undefined on spawn failure: degrade gracefully
+  process.exit(typeof e.status === 'number' ? e.status : 0);
 }
