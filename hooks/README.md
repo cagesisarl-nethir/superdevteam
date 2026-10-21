@@ -109,6 +109,11 @@ All hooks are available in both Bash (Linux/macOS) and PowerShell (Windows):
 
 ### persistence-hook.sh / .ps1
 
+**Status**: not wired in `hooks.json`. It was registered on `Notification` (`idle_prompt`),
+where Claude Code ignores the exit code and does not pass Claude's message, so it never ran.
+Moving it to `Stop` would make it block an agent that asks for confirmation or hands a
+decision back to a human, which this fork does not want.
+
 **Purpose**: Detects and prevents premature task abandonment.
 
 **Behavior**:
