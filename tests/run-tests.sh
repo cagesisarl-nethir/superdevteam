@@ -253,11 +253,9 @@ test_state_management() {
     if is_session_running; then
         log_pass "is_session_running returns true when session active"
         TESTS_RUN=$((TESTS_RUN + 1))
-        TESTS_PASSED=$((TESTS_PASSED + 1))
     else
         log_fail "is_session_running should return true"
         TESTS_RUN=$((TESTS_RUN + 1))
-        TESTS_FAILED=$((TESTS_FAILED + 1))
     fi
 
     # Test set_phase and get_current_phase
@@ -287,11 +285,9 @@ test_state_management() {
     if ! is_session_running; then
         log_pass "is_session_running returns false after session ended"
         TESTS_RUN=$((TESTS_RUN + 1))
-        TESTS_PASSED=$((TESTS_PASSED + 1))
     else
         log_fail "Session should not be running after end_session"
         TESTS_RUN=$((TESTS_RUN + 1))
-        TESTS_FAILED=$((TESTS_FAILED + 1))
     fi
 
     teardown_test_db
@@ -371,11 +367,9 @@ test_sql_injection_prevention() {
     if ! set_state "status; DROP TABLE sessions" "value" 2>/dev/null; then
         log_pass "SQL injection via field name blocked"
         TESTS_RUN=$((TESTS_RUN + 1))
-        TESTS_PASSED=$((TESTS_PASSED + 1))
     else
         log_fail "SQL injection via field name should be blocked"
         TESTS_RUN=$((TESTS_RUN + 1))
-        TESTS_FAILED=$((TESTS_FAILED + 1))
     fi
 
     # Verify tables still exist
@@ -413,11 +407,9 @@ test_event_logging() {
     if [ "$event_count" -ge 4 ]; then
         log_pass "Events were logged correctly ($event_count events)"
         TESTS_RUN=$((TESTS_RUN + 1))
-        TESTS_PASSED=$((TESTS_PASSED + 1))
     else
         log_fail "Expected at least 4 events, got $event_count"
         TESTS_RUN=$((TESTS_RUN + 1))
-        TESTS_FAILED=$((TESTS_FAILED + 1))
     fi
 
     teardown_test_db
@@ -446,11 +438,9 @@ test_file_structure() {
     if [ "$cmd_count" -ge 10 ]; then
         log_pass "Commands directory has sufficient files ($cmd_count)"
         TESTS_RUN=$((TESTS_RUN + 1))
-        TESTS_PASSED=$((TESTS_PASSED + 1))
     else
         log_fail "Expected at least 10 command files, got $cmd_count"
         TESTS_RUN=$((TESTS_RUN + 1))
-        TESTS_FAILED=$((TESTS_FAILED + 1))
     fi
 }
 
@@ -466,11 +456,9 @@ test_configuration() {
         if jq empty "$PROJECT_ROOT/agent-registry.json" 2>/dev/null; then
             log_pass "agent-registry.json is valid JSON"
             TESTS_RUN=$((TESTS_RUN + 1))
-            TESTS_PASSED=$((TESTS_PASSED + 1))
         else
             log_fail "agent-registry.json is not valid JSON"
             TESTS_RUN=$((TESTS_RUN + 1))
-            TESTS_FAILED=$((TESTS_FAILED + 1))
         fi
 
         # Check required fields in agent-registry.json
@@ -483,11 +471,9 @@ test_configuration() {
         if [ "$agent_count" -ge 80 ]; then
             log_pass "agent-registry.json has sufficient agents ($agent_count)"
             TESTS_RUN=$((TESTS_RUN + 1))
-            TESTS_PASSED=$((TESTS_PASSED + 1))
         else
             log_fail "Expected at least 80 agents, got $agent_count"
             TESTS_RUN=$((TESTS_RUN + 1))
-            TESTS_FAILED=$((TESTS_FAILED + 1))
         fi
     else
         log_skip "jq not installed, skipping JSON validation tests"
