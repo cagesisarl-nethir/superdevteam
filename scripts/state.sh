@@ -749,16 +749,16 @@ record_escalation() {
     esc_agent=$(sql_escape "$agent")
     esc_id=$(sql_escape "$session_id")
 
-    local query="INSERT INTO escalations (session_id, from_model, to_model, reason, agent, iteration)
-        VALUES ('$esc_id', '$esc_from', '$esc_to', '$esc_reason', '$esc_agent', ${iteration:-0});"
-
-    if ! sql_exec "$query" > /dev/null; then
+    # One transaction: the new model starts with a fresh failure counter,
+    # otherwise the next failure escalates again
+    if ! sql_transaction \
+        "INSERT INTO escalations (session_id, from_model, to_model, reason, agent, iteration)
+            VALUES ('$esc_id', '$esc_from', '$esc_to', '$esc_reason', '$esc_agent', ${iteration:-0});" \
+        "UPDATE sessions SET current_model = '$esc_to', consecutive_failures = 0 WHERE id = '$esc_id';" \
+        > /dev/null; then
         log_error "Failed to record escalation" "escalation"
         return 1
     fi
-
-    # Update current model
-    set_current_model "$to_model"
 
     log_info "Escalated: $from_model -> $to_model ($reason)" "escalation"
 }
