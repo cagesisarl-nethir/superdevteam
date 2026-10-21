@@ -195,14 +195,8 @@ inject_system_message() {
     local id="$1"
     local message="$2"
 
-    # Escape message for JSON
-    local escaped_msg
-    escaped_msg=$(printf '%s' "$message" | sed 's/\\/\\\\/g; s/"/\\"/g; s/\t/\\t/g' | awk '{printf "%s\\n", $0}' | sed 's/\\n$//')
-
-    # Output JSON context injection to stdout (Claude Code hook protocol)
-    cat <<EOF
-{"id":"devteam-${id}","type":"system","message":"${escaped_msg}"}
-EOF
+    # stderr is what Claude Code feeds back to Claude when the hook exits 2
+    printf '[devteam-%s]%s\n' "$id" "$message" >&2
 }
 
 # ============================================================================
@@ -327,13 +321,15 @@ EOF
 
 trigger_escalation() {
     local reason="$1"
+    local from_model="${2:-}"
+    local to_model="${3:-}"
 
     log_warn "${CURRENT_HOOK:-hook}" "Escalation triggered: $reason"
     log_event_to_db "model_escalated" "escalation" "Escalation: $reason" "{\"reason\":\"${reason//\"/\\\"}\"}"
 
-    # Record escalation in state.sh if available
-    if declare -f record_escalation &>/dev/null; then
-        record_escalation "$reason" 2>/dev/null || true
+    # Record (and switch the model) only when both models are known
+    if [[ -n "$from_model" && -n "$to_model" ]] && declare -f record_escalation &>/dev/null; then
+        record_escalation "$from_model" "$to_model" "$reason" 2>/dev/null || true
     fi
 }
 

@@ -6,8 +6,11 @@
 #   0 = Continue normally
 #   (Post hooks typically don't block, just observe and inject guidance)
 #
-# Environment variables expected:
+# Input: the JSON event Claude Code sends on stdin (tool_name,
+# tool_input.command, tool_response). Only Bash output is analyzed.
+# Fallback when stdin is empty (legacy test suite):
 #   CLAUDE_TOOL_NAME - Name of the tool that was called
+#   CLAUDE_TOOL_INPUT - JSON input for the tool (command)
 #   CLAUDE_TOOL_RESULT - Result/output from the tool
 
 set -euo pipefail
@@ -30,66 +33,78 @@ init_hook "post-tool-use"
 # CONFIGURATION
 # ============================================================================
 
-TOOL_NAME="${CLAUDE_TOOL_NAME:-}"
-TOOL_RESULT="${CLAUDE_TOOL_RESULT:-}"
+# Prints a field of the JSON event read on stdin: tool_name, command, or
+# result (Bash stdout + stderr). node is always present: hooks run through run-hook.js
+event_field() {
+    node -e '
+        let s = "";
+        process.stdin.on("data", d => s += d).on("end", () => {
+            let j = {};
+            try { j = JSON.parse(s); } catch (e) {}
+            const r = j.tool_response || {};
+            const fields = {
+                tool_name: j.tool_name,
+                command: (j.tool_input || {}).command,
+                result: typeof r === "string" ? r : [r.stdout, r.stderr].filter(Boolean).join("\n"),
+            };
+            process.stdout.write(fields[process.argv[1]] || "");
+        });' "$1"
+}
+
+HOOK_INPUT=""
+[[ -t 0 ]] || HOOK_INPUT=$(cat)
+
+if [[ -n "$HOOK_INPUT" ]]; then
+    TOOL_NAME=$(printf '%s' "$HOOK_INPUT" | event_field tool_name)
+    TOOL_COMMAND=$(printf '%s' "$HOOK_INPUT" | event_field command)
+    TOOL_RESULT=""
+    # Other tools' responses hold file contents, whose "Error" words would count as failures
+    if [[ "$TOOL_NAME" == "Bash" ]]; then
+        TOOL_RESULT=$(printf '%s' "$HOOK_INPUT" | event_field result)
+    fi
+else
+    TOOL_NAME="${CLAUDE_TOOL_NAME:-}"
+    TOOL_COMMAND=$(printf '{"tool_input":%s}' "${CLAUDE_TOOL_INPUT:-null}" | event_field command)
+    TOOL_RESULT="${CLAUDE_TOOL_RESULT:-}"
+fi
 
 # ============================================================================
 # OUTCOME DETECTION PATTERNS
 # ============================================================================
 
-# Patterns indicating failure
+# Patterns indicating failure (case-sensitive; counts must be non-zero so
+# "0 failures" in a passing run does not match)
 FAILURE_PATTERNS=(
-    "FAIL"
+    "FAILURES!"
+    "ERRORS!"
     "FAILED"
-    "Error:"
-    "error:"
-    "ERROR"
-    "Exception"
+    "FAIL "
+    "(Failures|Errors): [1-9]"
+    "[1-9][0-9]* (failed|failing|failures?|errors?|problems?)"
+    "Found [1-9][0-9]* errors?"
+    "FOUND [1-9][0-9]* ERRORS?"
+    "error TS[0-9]+"
     "Traceback"
-    "AssertionError"
-    "TypeError"
+    "Fatal error"
     "SyntaxError"
-    "ReferenceError"
-    "ModuleNotFoundError"
-    "ImportError"
-    "AttributeError"
-    "NameError"
-    "KeyError"
-    "IndexError"
-    "ValueError"
-    "RuntimeError"
-    "exit code [1-9]"
-    "exit status [1-9]"
-    "exited with code [1-9]"
     "Build failed"
     "Test failed"
     "Compilation failed"
-    "compile error"
     "Permission denied"
-    "No such file"
+    "No such file or directory"
     "command not found"
-    "ENOENT"
-    "EACCES"
-    "EPERM"
 )
 
 # Patterns indicating success
 SUCCESS_PATTERNS=(
-    "PASS"
-    "PASSED"
+    "OK \\("
+    "[0-9]+ passed"
     "All tests pass"
-    "tests passed"
-    "Build succeeded"
-    "Successfully"
-    "Completed successfully"
     "0 errors"
     "0 failures"
-    "exit code 0"
-    "exit status 0"
-    "OK"
-    "Done"
-    "created successfully"
-    "updated successfully"
+    "No errors"
+    "no problems"
+    "Build succeeded"
 )
 
 # ============================================================================
@@ -101,7 +116,7 @@ detect_outcome() {
 
     # Check for failure patterns first (more specific, takes priority)
     for pattern in "${FAILURE_PATTERNS[@]}"; do
-        if echo "$result" | grep -qiE "$pattern"; then
+        if echo "$result" | grep -qE "$pattern"; then
             echo "failure"
             return
         fi
@@ -109,7 +124,7 @@ detect_outcome() {
 
     # Check for success patterns
     for pattern in "${SUCCESS_PATTERNS[@]}"; do
-        if echo "$result" | grep -qi "$pattern"; then
+        if echo "$result" | grep -qE "$pattern"; then
             echo "success"
             return
         fi
@@ -122,38 +137,34 @@ detect_outcome() {
 # QUALITY GATE DETECTION
 # ============================================================================
 
+# Prints "<gate> <gate_type>" for a quality gate command, nothing otherwise
+gate_for_command() {
+    local command="$1"
+
+    # The gate is the first significant word, not a substring anywhere
+    # ("git show 3c8a1f2" is not c8): drop leading "cd dir &&" and VAR=value
+    command=$(echo "$command" | sed -E 's/^[[:space:]]*(cd [^;&|]*(&&|;)[[:space:]]*)*//; s/^([A-Za-z_][A-Za-z0-9_]*=[^[:space:]]*[[:space:]]+)*//')
+    local bin='^((npx|bunx|pnpm exec|php) )?(\./)?((vendor/bin|node_modules/\.bin)/)?'
+
+    if echo "$command" | grep -qE "${bin}(pytest|jest|vitest|mocha|rspec|phpunit|pest)\b|^(go|cargo) test\b|^(npm|yarn|pnpm|bun) (run )?test\b|^php artisan test\b"; then
+        echo "tests test"
+    elif echo "$command" | grep -qE "${bin}(tsc|mypy|pyright|phpstan|psalm)\b"; then
+        echo "typecheck type"
+    elif echo "$command" | grep -qE "${bin}(eslint|ruff|golangci-lint|rubocop|phpcs|pint|flake8|pylint|biome|prettier)\b"; then
+        echo "lint lint"
+    elif echo "$command" | grep -qE "${bin}(bandit|gosec|brakeman|safety|snyk|trivy)\b|^(npm|yarn|composer) audit\b"; then
+        echo "security security"
+    elif echo "$command" | grep -qE "${bin}(c8|nyc|lcov)\b"; then
+        echo "coverage coverage"
+    elif echo "$command" | grep -qE "^(npm|yarn|pnpm) run build\b|${bin}(vite build|webpack|esbuild|rollup)\b|^(cargo|go) build\b"; then
+        echo "build build"
+    fi
+}
+
 detect_quality_gate() {
-    local tool="$1"
-    local result="$2"
-
-    # Only analyze Bash command results
-    if [[ "$tool" != "Bash" ]]; then
-        return
-    fi
-
-    local gate=""
-    local gate_type=""
-
-    # Detect which quality gate was run
-    if echo "$result" | grep -qiE "(pytest|jest|vitest|mocha|go test|npm test|yarn test|bun test|rspec|phpunit|cargo test)"; then
-        gate="tests"
-        gate_type="test"
-    elif echo "$result" | grep -qiE "(tsc|mypy|pyright|type.check|typescript)"; then
-        gate="typecheck"
-        gate_type="type"
-    elif echo "$result" | grep -qiE "(eslint|ruff|golangci-lint|rubocop|phpcs|flake8|pylint|biome|prettier)"; then
-        gate="lint"
-        gate_type="lint"
-    elif echo "$result" | grep -qiE "(bandit|npm audit|yarn audit|gosec|brakeman|safety|snyk|trivy)"; then
-        gate="security"
-        gate_type="security"
-    elif echo "$result" | grep -qiE "(coverage|--cov|coverprofile|lcov|nyc|c8)"; then
-        gate="coverage"
-        gate_type="coverage"
-    elif echo "$result" | grep -qiE "(build|compile|webpack|vite|esbuild|rollup|tsc --build)"; then
-        gate="build"
-        gate_type="build"
-    fi
+    local gate="$1"
+    local gate_type="$2"
+    local result="$3"
 
     if [[ -n "$gate" ]]; then
         local outcome
@@ -216,8 +227,6 @@ handle_failure() {
 
     # Check if escalation needed
     if [[ "$failures" -ge "$threshold" ]]; then
-        trigger_escalation "$failures consecutive failures"
-
         local next_model
         case "$current_model" in
             haiku) next_model="sonnet" ;;
@@ -225,6 +234,8 @@ handle_failure() {
             opus) next_model="bug_council" ;;
             *) next_model="" ;;
         esac
+
+        trigger_escalation "$failures consecutive failures" "$current_model" "$next_model"
 
         if [[ "$next_model" == "bug_council" ]]; then
             inject_system_message "bug-council" "
@@ -354,6 +365,19 @@ main() {
         exit 0
     fi
 
+    # Only quality gate commands are analyzed: word matching on arbitrary
+    # output (git log, grep) counted false failures
+    local gate gate_type
+    read -r gate gate_type <<< "$(gate_for_command "$TOOL_COMMAND")"
+    if [[ "$TOOL_NAME" != "Bash" ]] || [[ -z "$gate" ]]; then
+        exit 0
+    fi
+
+    # Failure counters live on the session: without one there is nothing to track
+    if [[ -z "$(get_current_session_id 2>/dev/null)" ]]; then
+        exit 0
+    fi
+
     log_debug "post-tool-use" "Processing result from: $TOOL_NAME"
 
     # Detect outcome
@@ -379,7 +403,7 @@ main() {
     esac
 
     # Detect and log quality gate results
-    detect_quality_gate "$TOOL_NAME" "$TOOL_RESULT"
+    detect_quality_gate "$gate" "$gate_type" "$TOOL_RESULT"
 
     # Notify MCP server
     mcp_notify "post_tool_use" "$(get_claude_context)"

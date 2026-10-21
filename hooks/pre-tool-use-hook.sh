@@ -6,7 +6,8 @@
 #   0 = Allow tool call
 #   2 = Block tool call with message
 #
-# Environment variables expected:
+# Input: the JSON event Claude Code sends on stdin (tool_name, tool_input).
+# Fallback when stdin is empty (legacy test suite):
 #   CLAUDE_TOOL_NAME - Name of the tool being called
 #   CLAUDE_TOOL_INPUT - JSON input for the tool
 
@@ -30,8 +31,23 @@ init_hook "pre-tool-use"
 # CONFIGURATION
 # ============================================================================
 
-TOOL_NAME="${CLAUDE_TOOL_NAME:-}"
-TOOL_INPUT="${CLAUDE_TOOL_INPUT:-}"
+HOOK_INPUT=""
+[[ -t 0 ]] || HOOK_INPUT=$(cat)
+
+if [[ -n "$HOOK_INPUT" ]]; then
+    # node is always present: hooks.json launches every hook through run-hook.js
+    { read -r TOOL_NAME; read -r TOOL_INPUT; } < <(printf '%s' "$HOOK_INPUT" | node -e '
+        let s = "";
+        process.stdin.on("data", d => s += d).on("end", () => {
+            let j = {};
+            try { j = JSON.parse(s); } catch (e) {}
+            console.log(j.tool_name || "");
+            console.log(j.tool_input ? JSON.stringify(j.tool_input) : "");
+        });')
+else
+    TOOL_NAME="${CLAUDE_TOOL_NAME:-}"
+    TOOL_INPUT="${CLAUDE_TOOL_INPUT:-}"
+fi
 
 if [[ -z "$TOOL_NAME" ]] && [[ -z "$TOOL_INPUT" ]]; then
     log_warn "pre-tool-use" "No CLAUDE_TOOL_NAME or CLAUDE_TOOL_INPUT set"
@@ -43,67 +59,82 @@ fi
 # ============================================================================
 
 # Commands that should ALWAYS be blocked
+# Patterns use word boundaries (\b) and, for paths, an end anchor, so that
+# "rm -rf /tmp/x", "--follow-tags" or "echo departed" do not match.
 DANGEROUS_PATTERNS=(
     # Destructive file operations
-    "rm -rf /"
-    "rm -rf /*"
-    "rm -rf ~"
-    "rm -rf \$HOME"
-    "rm -rf \\\$HOME"
+    '\brm\s+-rf\s+/(\s|;|&|\||$)'
+    '\brm\s+-rf\s+/\*'
+    '\brm\s+-rf\s+~/?(\s|;|&|\||$)'
+    '\brm\s+-rf\s+\$HOME/?(\s|;|&|\||$)'
+    '\brm\s+-rf\s+\\\$HOME/?(\s|;|&|\||$)'
 
     # Disk/system destruction
-    "dd if=/dev/zero"
-    "dd if=/dev/random"
-    "mkfs\."
-    "fdisk"
-    "parted"
-    "> /dev/sd"
-    "> /dev/nvme"
+    '\bdd\s+if=/dev/zero'
+    '\bdd\s+if=/dev/random'
+    '\bmkfs\.'
+    '\bfdisk\b'
+    '\bparted\b'
+    '>\s*/dev/sd'
+    '>\s*/dev/nvme'
 
     # Fork bombs and system abuse
-    ":\(\)\{ :\|:& \};"
-    ":(){ :|:& };"
+    ':\(\)\{ :\|:& \};'
+    ':(){ :|:& };'
 
     # Dangerous permissions
-    "chmod -R 777 /"
-    "chmod -R 777 /\*"
-    "chown -R.*/"
+    '\bchmod\s+-R\s+777\s+/(\s|;|&|\||$)'
+    '\bchmod\s+-R\s+777\s+/\*'
+    '\bchown\s+-R\s+\S+\s+/(\s|\*|;|&|\||$)'
 
     # Git force push to main/master
-    "git push.*--force.*main"
-    "git push.*--force.*master"
-    "git push.*-f.*main"
-    "git push.*-f.*master"
+    '\bgit\s+push\b.*\s--force\b.*\bmain\b'
+    '\bgit\s+push\b.*\s--force\b.*\bmaster\b'
+    '\bgit\s+push\b.*\s-f\b.*\bmain\b'
+    '\bgit\s+push\b.*\s-f\b.*\bmaster\b'
 
-    # Database destruction
-    "DROP DATABASE"
-    "DROP TABLE"
-    "TRUNCATE TABLE"
-    "DELETE FROM.*WHERE 1"
+    # Database destruction (only when a database client runs it, before or after the SQL)
+    '\b(mysql|mariadb|psql|sqlite3|tinker)\b.*DROP\s+DATABASE|DROP\s+DATABASE.*\b(mysql|mariadb|psql|sqlite3)\b'
+    '\b(mysql|mariadb|psql|sqlite3|tinker)\b.*DROP\s+TABLE|DROP\s+TABLE.*\b(mysql|mariadb|psql|sqlite3)\b'
+    '\b(mysql|mariadb|psql|sqlite3|tinker)\b.*TRUNCATE\s+TABLE|TRUNCATE\s+TABLE.*\b(mysql|mariadb|psql|sqlite3)\b'
+    '\b(mysql|mariadb|psql|sqlite3|tinker)\b.*DELETE\s+FROM.*WHERE\s+1|DELETE\s+FROM.*WHERE\s+1.*\b(mysql|mariadb|psql|sqlite3)\b'
 
     # Credential/key exposure
-    "cat.*\.ssh/id_"
-    "cat.*/etc/shadow"
-    "cat.*/etc/passwd"
+    '\bcat\b.*\.ssh/id_'
+    '\bcat\b.*/etc/shadow'
+    '\bcat\b.*/etc/passwd'
 
     # Crypto mining/malware indicators
-    "curl.*\|.*bash"
-    "wget.*\|.*bash"
-    "curl.*\|.*sh"
-    "wget.*\|.*sh"
+    '\bcurl\b.*\|.*\bbash\b'
+    '\bwget\b.*\|.*\bbash\b'
+    '\bcurl\b.*\|.*\bsh\b'
+    '\bwget\b.*\|.*\bsh\b'
 
     # Arbitrary code execution
-    "eval\s+"
+    '\beval\s+'
 
     # Privilege escalation
-    "sudo\s+"
+    '\bsudo\s+'
 
     # Overly permissive permissions
-    "chmod\s+777"
+    '\bchmod\s+777\b'
 
     # Variant of rm -rf /
-    "rm\s+-rf\s+/\*"
+    '\brm\s+-rf\s+/\*'
 )
+
+# Prints the "command" field of a Bash tool input (JSON)
+bash_command_of() {
+    local input="$1"
+    local command=""
+    if command -v jq &>/dev/null; then
+        command=$(echo "$input" | jq -r '.command // empty' 2>/dev/null)
+    fi
+    if [[ -z "$command" ]]; then
+        command=$(echo "$input" | grep -o '"command"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | sed 's/.*"command"[[:space:]]*:[[:space:]]*"//;s/"$//')
+    fi
+    echo "$command"
+}
 
 # ============================================================================
 # SCOPE VALIDATION FOR FILE OPERATIONS
@@ -122,13 +153,16 @@ validate_file_operation() {
             file_path=$(echo "$input" | sed -n 's/.*"file_path"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' 2>/dev/null || true)
             ;;
         Bash)
+            # Parse the command itself: the raw JSON ends with "description"
+            local command
+            command=$(bash_command_of "$input")
             # Check for file-modifying commands and extract target
-            if echo "$input" | grep -qE '(cat\s*>|echo\s*>|printf\s*>|tee\s)'; then
+            if echo "$command" | grep -qE '(cat\s*>|echo\s*>|printf\s*>|tee\s)'; then
                 # Redirect operations
-                file_path=$(echo "$input" | sed -n 's/.*>[[:space:]]*\([^[:space:];&|]*\).*/\1/p' 2>/dev/null | head -1 || true)
-            elif echo "$input" | grep -qE '(sed\s+-i|mv\s|cp\s)'; then
+                file_path=$(echo "$command" | sed -n 's/.*>[[:space:]]*\([^[:space:];&|]*\).*/\1/p' 2>/dev/null | head -1 || true)
+            elif echo "$command" | grep -qE '(sed\s+-i|mv\s|cp\s)'; then
                 # In-place edit or move/copy
-                file_path=$(echo "$input" | awk '{print $NF}' 2>/dev/null || true)
+                file_path=$(echo "$command" | awk '{print $NF}' 2>/dev/null || true)
             fi
             ;;
         *)
@@ -184,14 +218,8 @@ check_dangerous_commands() {
         return 0
     fi
 
-    # Extract command from JSON input
-    local command=""
-    if command -v jq &>/dev/null; then
-        command=$(echo "$input" | jq -r '.command // empty' 2>/dev/null)
-    fi
-    if [[ -z "$command" ]]; then
-        command=$(echo "$input" | grep -o '"command"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | sed 's/.*"command"[[:space:]]*:[[:space:]]*"//;s/"$//')
-    fi
+    local command
+    command=$(bash_command_of "$input")
 
     for pattern in "${DANGEROUS_PATTERNS[@]}"; do
         if echo "$command" | grep -qiE "$pattern"; then
