@@ -3,6 +3,10 @@
 # Shared utilities for security, logging, and validation
 # Source this file in other scripts
 
+# Sourcing twice would fail on the readonly variables below
+[[ -n "${DEVTEAM_COMMON_LOADED:-}" ]] && return 0
+DEVTEAM_COMMON_LOADED=1
+
 set -euo pipefail
 
 # ============================================================================
@@ -14,7 +18,7 @@ DB_FILE="${DEVTEAM_DIR}/devteam.db"
 LOG_LEVEL="${DEVTEAM_LOG_LEVEL:-info}"  # debug, info, warn, error
 
 # Valid log levels (numeric for comparison)
-declare -A LOG_LEVELS=(
+declare -gA LOG_LEVELS=(
     [debug]=0
     [info]=1
     [warn]=2
@@ -257,7 +261,7 @@ readonly VALID_TABLES=(
 )
 
 # Valid column names per table (whitelist to prevent SQL injection)
-declare -A VALID_COLUMNS
+declare -gA VALID_COLUMNS
 VALID_COLUMNS[sessions]="id,started_at,ended_at,command,command_type,status,exit_reason,current_phase,current_task_id,current_agent,current_model,current_iteration,max_iterations,consecutive_failures,max_consecutive_failures,circuit_breaker_state,plan_id,sprint_id,execution_mode,total_tokens_input,total_tokens_output,total_cost_cents,bug_council_activated,bug_council_reason"
 VALID_COLUMNS[session_state]="session_id,key,value,updated_at"
 VALID_COLUMNS[events]="id,session_id,timestamp,event_type,event_category,agent,model,iteration,phase,data,metadata,message,tokens_input,tokens_output,cost_cents"
