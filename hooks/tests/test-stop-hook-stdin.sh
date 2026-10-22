@@ -40,6 +40,11 @@ check "exit signal in last_assistant_message allows exit" 0 "$out"
 out=$(echo '{"hook_event_name":"Stop","stop_hook_active":false,"last_assistant_message":"I am done for now"}' | run_hook)
 check "no exit signal blocks exit" 2 "$out"
 
+# Second stop after a block: allowed, autonomous mode left on (no cleanup)
+out=$(echo '{"hook_event_name":"Stop","stop_hook_active":true,"last_assistant_message":"I am done for now"}' \
+    | { run_hook; [[ -f "$DEVTEAM_DIR/autonomous-mode" ]] && echo kept || echo removed; } | tr '\n' ' ')
+check "stop_hook_active allows exit, mode kept" "0 kept " "$out"
+
 out=$(STOP_HOOK_MESSAGE="EXIT_SIGNAL: true" run_hook < /dev/null)
 check "legacy env var still works" 0 "$out"
 
