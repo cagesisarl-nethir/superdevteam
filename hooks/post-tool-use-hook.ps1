@@ -152,7 +152,7 @@ function Invoke-FailureHandler {
     ($Result -split "`n" | Where-Object { $_ -match "(error|fail|exception)" } | Select-Object -First 20) -join "`n" | Set-Content $errorsFile -ErrorAction SilentlyContinue
 
     # Escalation threshold
-    $threshold = if ($script:ECO_MODE) { 4 } else { 2 }
+    $threshold = if ($script:ECO_MODE -eq "true") { 4 } else { 2 }
 
     if ($failures -ge $threshold) {
         Invoke-Escalation "$failures consecutive failures"
