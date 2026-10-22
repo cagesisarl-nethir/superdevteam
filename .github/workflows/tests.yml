@@ -1,0 +1,38 @@
+name: tests
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install sqlite3
+        run: sudo apt-get update && sudo apt-get install -y sqlite3
+
+      # The .ps1 tests skip without pwsh: fail here instead of passing silently
+      - name: Check tools
+        run: |
+          sqlite3 --version
+          jq --version
+          node --version
+          pwsh -NoProfile -Command '$PSVersionTable.PSVersion.ToString()'
+
+      - name: tests/run-tests.sh
+        run: bash tests/run-tests.sh
+
+      - name: hooks/tests
+        run: |
+          failed=0
+          for t in hooks/tests/*.sh; do
+            echo "== $t"
+            bash "$t" || { echo "FAILED: $t"; failed=1; }
+          done
+          exit $failed
