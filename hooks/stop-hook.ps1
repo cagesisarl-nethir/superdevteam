@@ -154,7 +154,7 @@ CIRCUIT BREAKER TRIPPED
 Maximum consecutive failures ($($script:MAX_FAILURES)) reached.
 Human intervention is required.
 "@
-    Write-Output $message
+    [Console]::Error.WriteLine($message)
     exit 0
 }
 
@@ -169,7 +169,7 @@ MAXIMUM ITERATIONS REACHED
 
 The session has reached $($script:MAX_ITERATIONS) iterations.
 "@
-    Write-Output $message
+    [Console]::Error.WriteLine($message)
     exit 0
 }
 
@@ -199,7 +199,7 @@ You must either:
 
 Include EXIT_SIGNAL: true when properly complete.
 "@
-Write-Output $message
+[Console]::Error.WriteLine($message)
 
 # Increment iteration
 if ($sessionId) {

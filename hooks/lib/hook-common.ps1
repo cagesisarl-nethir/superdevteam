@@ -62,7 +62,7 @@ function Initialize-DevTeamDatabase {
         & sqlite3 $script:DB_FILE "INSERT OR REPLACE INTO schema_version (version) VALUES ($schemaVersion);" 2>$null
     } catch {}
 
-    Write-Host "[hook-common] Auto-initialized database: $($script:DB_FILE) (schema v${schemaVersion})" -ForegroundColor Green
+    [Console]::Error.WriteLine("[hook-common] Auto-initialized database: $($script:DB_FILE) (schema v${schemaVersion})")
 }
 
 # ============================================================================
@@ -95,22 +95,22 @@ function Initialize-Hook {
 
 function Write-HookDebug {
     param([string]$Context, [string]$Message)
-    Write-Host "[debug] [$Context] $Message" -ForegroundColor DarkGray
+    [Console]::Error.WriteLine("[debug] [$Context] $Message")
 }
 
 function Write-HookInfo {
     param([string]$Context, [string]$Message)
-    Write-Host "[info]  [$Context] $Message" -ForegroundColor Green
+    [Console]::Error.WriteLine("[info]  [$Context] $Message")
 }
 
 function Write-HookWarn {
     param([string]$Context, [string]$Message)
-    Write-Host "[warn]  [$Context] $Message" -ForegroundColor Yellow
+    [Console]::Error.WriteLine("[warn]  [$Context] $Message")
 }
 
 function Write-HookError {
     param([string]$Context, [string]$Message)
-    Write-Host "[error] [$Context] $Message" -ForegroundColor Red
+    [Console]::Error.WriteLine("[error] [$Context] $Message")
 }
 
 # ============================================================================
@@ -325,10 +325,10 @@ function ConvertTo-SafeJsonString {
 # SYSTEM MESSAGE (Claude Code hook context injection)
 # ============================================================================
 
+# Callers write it to stderr, which Claude Code feeds back to Claude when the hook exits 2
 function Get-SystemMessage {
     param([string]$Id, [string]$Message)
-    $escapedMsg = ConvertTo-SafeJsonString $Message
-    return "{`"id`":`"devteam-${Id}`",`"type`":`"system`",`"message`":`"${escapedMsg}`"}"
+    return "[devteam-${Id}]${Message}"
 }
 
 # ============================================================================

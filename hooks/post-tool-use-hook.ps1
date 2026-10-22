@@ -128,7 +128,7 @@ Next steps:
 
 Do not proceed until this gate passes.
 "@
-            Write-Output $message
+            [Console]::Error.WriteLine($message)
         }
     }
 }
@@ -177,7 +177,7 @@ The Bug Council diagnostic team:
 4. Systems Thinker
 5. Adversarial Tester
 "@
-            Write-Output $message
+            [Console]::Error.WriteLine($message)
         }
         elseif ($nextModel) {
             $message = Get-SystemMessage "escalation" @"
@@ -189,7 +189,7 @@ Reason: $failures consecutive failures
 
 Please try a different approach.
 "@
-            Write-Output $message
+            [Console]::Error.WriteLine($message)
         }
     }
 }
@@ -218,7 +218,7 @@ Before marking complete, verify:
 
 If complete, use EXIT_SIGNAL: true
 "@
-        Write-Output $message
+        [Console]::Error.WriteLine($message)
     }
 }
 
@@ -235,7 +235,7 @@ MISSING DEPENDENCY DETECTED
 
 Install the missing package and re-run.
 "@
-        Write-Output $message
+        [Console]::Error.WriteLine($message)
     }
 
     if ($Result -match "(TypeError|type.*mismatch)") {
@@ -244,7 +244,7 @@ TYPE ERROR DETECTED
 
 Check expected vs actual types.
 "@
-        Write-Output $message
+        [Console]::Error.WriteLine($message)
     }
 
     if ($Result -match "(Permission denied|EACCES)") {
@@ -253,7 +253,7 @@ PERMISSION ERROR DETECTED
 
 Check file/directory permissions.
 "@
-        Write-Output $message
+        [Console]::Error.WriteLine($message)
     }
 }
 
