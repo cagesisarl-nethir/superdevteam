@@ -64,19 +64,19 @@ $DangerousPatterns = @(
 function Test-FileOperation {
     param(
         [string]$Tool,
-        [string]$Input
+        [string]$ToolInput
     )
 
     $filePath = $null
 
     switch ($Tool) {
         { $_ -in @("Write", "Edit", "NotebookEdit") } {
-            if ($Input -match '"file_path"\s*:\s*"([^"]+)"') {
+            if ($ToolInput -match '"file_path"\s*:\s*"([^"]+)"') {
                 $filePath = $Matches[1]
             }
         }
         "Bash" {
-            if ($Input -match '>\s*([^\s;&|]+)') {
+            if ($ToolInput -match '>\s*([^\s;&|]+)') {
                 $filePath = $Matches[1]
             }
         }
@@ -120,13 +120,13 @@ Please only modify files within the allowed scope.
 function Test-DangerousCommand {
     param(
         [string]$Tool,
-        [string]$Input
+        [string]$ToolInput
     )
 
     if ($Tool -ne "Bash") { return $true }
 
-    $command = $Input
-    if ($Input -match '"command"\s*:\s*"([^"]+)"') {
+    $command = $ToolInput
+    if ($ToolInput -match '"command"\s*:\s*"([^"]+)"') {
         $command = $Matches[1]
     }
 
