@@ -34,15 +34,22 @@ init_hook "stop"
 HOOK_INPUT=""
 [[ -t 0 ]] || HOOK_INPUT=$(cat)
 
-MESSAGE=""
-if [[ -n "$HOOK_INPUT" ]]; then
-    MESSAGE=$(printf '%s' "$HOOK_INPUT" | node -e '
+# Prints a top-level field of the JSON event read on stdin
+event_field() {
+    node -e '
         let s = "";
         process.stdin.on("data", d => s += d).on("end", () => {
             let j = {};
             try { j = JSON.parse(s); } catch (e) {}
-            process.stdout.write(j.last_assistant_message || "");
-        });')
+            process.stdout.write(String(j[process.argv[1]] ?? ""));
+        });' "$1"
+}
+
+MESSAGE=""
+STOP_HOOK_ACTIVE=""
+if [[ -n "$HOOK_INPUT" ]]; then
+    MESSAGE=$(printf '%s' "$HOOK_INPUT" | event_field last_assistant_message)
+    STOP_HOOK_ACTIVE=$(printf '%s' "$HOOK_INPUT" | event_field stop_hook_active)
 fi
 MESSAGE="${MESSAGE:-${STOP_HOOK_MESSAGE:-${CLAUDE_OUTPUT:-}}}"
 
@@ -243,6 +250,14 @@ MAXIMUM ITERATIONS REACHED
 The session has reached $MAX_ITERATIONS iterations.
 Review progress in .devteam/ and decide next steps.
 "
+        exit 0
+    fi
+
+    # Claude already continued once because of this hook: let it stop and hand
+    # back to the user, session left open (no cleanup)
+    if [[ "$STOP_HOOK_ACTIVE" == "true" ]]; then
+        log_info "stop" "Exit allowed - already continued once after a block"
+        log_event_to_db "exit_allowed_after_block" "persistence" "Exit allowed - already continued once after a block"
         exit 0
     fi
 
