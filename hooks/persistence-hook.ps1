@@ -343,7 +343,7 @@ The human will review, but DO NOT STOP working.
 
 # Output re-engagement prompt
 $prompt = Get-ReengagementPrompt -Attempt $ATTEMPT_COUNT -DetectionType $DETECTION_TYPE
-Write-Output $prompt
+[Console]::Error.WriteLine($prompt)
 
 # Block and force continuation
 exit 2

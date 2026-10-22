@@ -105,7 +105,7 @@ $scopeList
 
 Please only modify files within the allowed scope.
 "@
-            Write-Output $message
+            [Console]::Error.WriteLine($message)
             exit 2
         }
     }
@@ -148,7 +148,7 @@ If this is intentional and authorized:
 1. Ask the user for explicit confirmation
 2. Explain why this destructive operation is necessary
 "@
-            Write-Output $message
+            [Console]::Error.WriteLine($message)
             exit 2
         }
     }
@@ -173,7 +173,7 @@ Current iteration: $iteration/$($script:MAX_ITERATIONS)
 
 Focus on fixing the most critical issues first.
 "@
-        Write-Output $message
+        [Console]::Error.WriteLine($message)
     }
     elseif ($remaining -le 0) {
         $message = Get-SystemMessage "iteration-limit" @"
@@ -189,7 +189,7 @@ Ensure you:
 
 Use EXIT_SIGNAL: true to cleanly end the session.
 "@
-        Write-Output $message
+        [Console]::Error.WriteLine($message)
     }
 }
 
@@ -211,7 +211,7 @@ The circuit breaker will trip after $($script:MAX_FAILURES) consecutive failures
 
 Consider trying a different approach.
 "@
-        Write-Output $message
+        [Console]::Error.WriteLine($message)
     }
 }
 

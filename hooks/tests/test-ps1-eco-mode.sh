@@ -36,7 +36,7 @@ second_failure() {
     sqlite3 "$DEVTEAM_DIR/devteam.db" "INSERT INTO sessions (id, command, command_type, status, current_model, consecutive_failures)
         VALUES ('s1', 'test', 'feature', 'running', 'sonnet', 1);"
     DEVTEAM_ECO_MODE="$1" CLAUDE_TOOL_NAME=Bash CLAUDE_TOOL_INPUT='{"command":"phpunit"}' CLAUDE_TOOL_RESULT="Tests: 1 FAILED" \
-        pwsh -NoProfile -File "$HOOKS_DIR/post-tool-use-hook.ps1" < /dev/null 2>/dev/null \
+        pwsh -NoProfile -File "$HOOKS_DIR/post-tool-use-hook.ps1" < /dev/null 2>&1 > /dev/null \
         | grep -q "MODEL ESCALATED" && echo escalated || echo none
 }
 
