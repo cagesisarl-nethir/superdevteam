@@ -36,3 +36,34 @@ jobs:
             bash "$t" || { echo "FAILED: $t"; failed=1; }
           done
           exit $failed
+
+  # Runs the .ps1 tests under Windows PowerShell 5.1 and PowerShell 7
+  windows:
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install sqlite3
+        run: choco install sqlite -y --no-progress
+
+      # The .ps1 tests skip without their PowerShell: fail here instead of passing silently
+      - name: Check tools
+        run: |
+          sqlite3 --version
+          node --version
+          powershell -NoProfile -Command '$PSVersionTable.PSVersion.ToString()'
+          pwsh -NoProfile -Command '$PSVersionTable.PSVersion.ToString()'
+
+      - name: .ps1 tests
+        run: |
+          failed=0
+          for ps in powershell pwsh; do
+            for t in hooks/tests/test-ps1-*.sh; do
+              echo "== $t ($ps)"
+              DEVTEAM_TEST_PWSH=$ps bash "$t" || { echo "FAILED: $t ($ps)"; failed=1; }
+            done
+          done
+          exit $failed

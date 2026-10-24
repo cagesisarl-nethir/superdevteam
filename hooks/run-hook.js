@@ -19,13 +19,16 @@ const isWindows = process.platform === 'win32';
 const shScript = resolve(__dirname, hookName + '.sh');
 const ps1Script = resolve(__dirname, hookName + '.ps1');
 
-// hook-common.ps1 needs PowerShell 7 (??): Windows PowerShell 5.1 is only a fallback
+// Prefer PowerShell 7; Windows PowerShell 5.1 is the fallback
 const powershell = (process.env.PATH || '').split(delimiter)
   .some(dir => existsSync(join(dir, 'pwsh.exe'))) ? 'pwsh' : 'powershell';
 
 try {
   if (isWindows) {
     if (existsSync(ps1Script)) {
+      if (powershell === 'powershell') {
+        process.stderr.write('[devteam] running under PowerShell 5.1\n');
+      }
       execSync(
         powershell + ' -ExecutionPolicy Bypass -NoProfile -File "' + ps1Script + '"',
         { stdio: 'inherit', timeout: 30000 }

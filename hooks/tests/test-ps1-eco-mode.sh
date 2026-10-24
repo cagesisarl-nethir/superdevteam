@@ -11,8 +11,11 @@ HOOKS_DIR="$(dirname "$SCRIPT_DIR")"
 TMP_DIR="$(mktemp -d)"
 trap 'rm -rf "$TMP_DIR"' EXIT
 
-if ! command -v pwsh > /dev/null; then
-    echo "  SKIP: pwsh not installed"
+# DEVTEAM_TEST_PWSH picks the PowerShell to test (powershell = Windows PowerShell 5.1)
+PWSH="${DEVTEAM_TEST_PWSH:-pwsh}"
+
+if ! command -v "$PWSH" > /dev/null; then
+    echo "  SKIP: $PWSH not installed"
     exit 0
 fi
 
@@ -36,7 +39,7 @@ second_failure() {
     sqlite3 "$DEVTEAM_DIR/devteam.db" "INSERT INTO sessions (id, command, command_type, status, current_model, consecutive_failures)
         VALUES ('s1', 'test', 'feature', 'running', 'sonnet', 1);"
     DEVTEAM_ECO_MODE="$1" CLAUDE_TOOL_NAME=Bash CLAUDE_TOOL_INPUT='{"command":"phpunit"}' CLAUDE_TOOL_RESULT="Tests: 1 FAILED" \
-        pwsh -NoProfile -File "$HOOKS_DIR/post-tool-use-hook.ps1" < /dev/null 2>&1 > /dev/null \
+        "$PWSH" -NoProfile -File "$HOOKS_DIR/post-tool-use-hook.ps1" < /dev/null 2>&1 > /dev/null \
         | grep -q "MODEL ESCALATED" && echo escalated || echo none
 }
 

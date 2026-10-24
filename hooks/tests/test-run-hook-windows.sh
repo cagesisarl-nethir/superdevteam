@@ -39,5 +39,7 @@ run_as_windows() {
 
 check "pwsh.exe on PATH runs pwsh" pwsh "$(run_as_windows bin-pwsh)"
 check "no pwsh.exe falls back to powershell" powershell "$(run_as_windows bin)"
+check "fallback says so on stderr" "[devteam] running under PowerShell 5.1" "$(run_as_windows bin 2>&1 > /dev/null)"
+check "pwsh writes nothing on stderr" "" "$(run_as_windows bin-pwsh 2>&1 > /dev/null)"
 
 exit $FAILED
