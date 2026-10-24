@@ -243,7 +243,8 @@ function Write-EventToDb {
     )
     if (Test-DatabaseExists) {
         $sessionId = Get-CurrentSession
-        $safeSession = ($sessionId ?? "") -replace "'", "''"
+        if ($null -eq $sessionId) { $sessionId = "" }
+        $safeSession = $sessionId -replace "'", "''"
         $safeMsg = $Message -replace "'", "''"
         $safeData = $Data -replace "'", "''"
         $safeType = $EventType -replace "'", "''"
@@ -295,8 +296,10 @@ function Get-ClaudeContext {
     $iteration = Get-CurrentIteration
     $failures = Get-ConsecutiveFailures
     $model = Get-CurrentModel
-    $safeSession = ($sessionId ?? "") -replace '"', '\"'
-    $safeTask = ($taskId ?? "") -replace '"', '\"'
+    if ($null -eq $sessionId) { $sessionId = "" }
+    if ($null -eq $taskId) { $taskId = "" }
+    $safeSession = $sessionId -replace '"', '\"'
+    $safeTask = $taskId -replace '"', '\"'
     return "{`"session`":`"$safeSession`",`"task`":`"$safeTask`",`"iteration`":$iteration,`"failures`":$failures,`"model`":`"$model`",`"hook`":`"$($script:CURRENT_HOOK)`"}"
 }
 

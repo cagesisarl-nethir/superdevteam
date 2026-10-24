@@ -11,8 +11,11 @@ HOOKS_DIR="$(dirname "$SCRIPT_DIR")"
 TMP_DIR="$(mktemp -d)"
 trap 'rm -rf "$TMP_DIR"' EXIT
 
-if ! command -v pwsh > /dev/null; then
-    echo "  SKIP: pwsh not installed"
+# DEVTEAM_TEST_PWSH picks the PowerShell to test (powershell = Windows PowerShell 5.1)
+PWSH="${DEVTEAM_TEST_PWSH:-pwsh}"
+
+if ! command -v "$PWSH" > /dev/null; then
+    echo "  SKIP: $PWSH not installed"
     exit 0
 fi
 
@@ -31,7 +34,7 @@ check() {
 # Runs the hook with the legacy env vars in a fresh DEVTEAM_DIR; prints its exit code
 run_hook() {
     DEVTEAM_DIR="$TMP_DIR/$RANDOM/.devteam" CLAUDE_TOOL_NAME="$1" CLAUDE_TOOL_INPUT="$2" \
-        pwsh -NoProfile -File "$HOOKS_DIR/pre-tool-use-hook.ps1" < /dev/null > /dev/null 2>&1
+        "$PWSH" -NoProfile -File "$HOOKS_DIR/pre-tool-use-hook.ps1" < /dev/null > /dev/null 2>&1
     echo $?
 }
 

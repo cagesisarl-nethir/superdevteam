@@ -11,8 +11,11 @@ HOOKS_DIR="$(dirname "$SCRIPT_DIR")"
 TMP_DIR="$(mktemp -d)"
 trap 'rm -rf "$TMP_DIR"' EXIT
 
-if ! command -v pwsh > /dev/null; then
-    echo "  SKIP: pwsh not installed"
+# DEVTEAM_TEST_PWSH picks the PowerShell to test (powershell = Windows PowerShell 5.1)
+PWSH="${DEVTEAM_TEST_PWSH:-pwsh}"
+
+if ! command -v "$PWSH" > /dev/null; then
+    echo "  SKIP: $PWSH not installed"
     exit 0
 fi
 
@@ -31,7 +34,7 @@ check() {
 }
 
 CLAUDE_TOOL_NAME=Bash CLAUDE_TOOL_INPUT='{"command":"rm -rf /"}' \
-    pwsh -NoProfile -File "$HOOKS_DIR/pre-tool-use-hook.ps1" < /dev/null > "$TMP_DIR/out" 2> "$TMP_DIR/err"
+    "$PWSH" -NoProfile -File "$HOOKS_DIR/pre-tool-use-hook.ps1" < /dev/null > "$TMP_DIR/out" 2> "$TMP_DIR/err"
 check "dangerous command exits 2" 2 $?
 check "stdout is empty" "" "$(cat "$TMP_DIR/out")"
 grep -q '^\[devteam-danger-blocked\]' "$TMP_DIR/err"
@@ -39,7 +42,7 @@ check "reason is on stderr" 0 $?
 
 touch "$DEVTEAM_DIR/autonomous-mode"
 STOP_HOOK_MESSAGE="I am done for now" \
-    pwsh -NoProfile -File "$HOOKS_DIR/stop-hook.ps1" < /dev/null > "$TMP_DIR/out" 2> "$TMP_DIR/err"
+    "$PWSH" -NoProfile -File "$HOOKS_DIR/stop-hook.ps1" < /dev/null > "$TMP_DIR/out" 2> "$TMP_DIR/err"
 check "stop without signal exits 2" 2 $?
 check "stop-hook stdout is empty" "" "$(cat "$TMP_DIR/out")"
 grep -q '^\[devteam-exit-blocked\]' "$TMP_DIR/err"
